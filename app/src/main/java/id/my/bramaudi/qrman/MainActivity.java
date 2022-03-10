@@ -1,23 +1,29 @@
 package id.my.bramaudi.qrman;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.webkit.JsResult;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.webkit.WebViewClient;
 import android.widget.Toast;
 
 public class MainActivity extends Activity {
 
     public static final int PICKFILE_RESULT_CODE = 1;
+    private final int PERMISSION_REQUEST_CODE = 11;
 
     private WebView browser;
-    private ValueCallback<Uri[]> uploadMessage;
+    private ValueCallback<Uri[]> pickedFile;
+    private String downloadUrl = "";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -25,8 +31,10 @@ public class MainActivity extends Activity {
         setContentView(R.layout.activity_main);
 
         browser = findViewById(R.id.webview);
+        browser.setWebViewClient(getMyWebViewClient());
         browser.setWebChromeClient(getMyWebChromeClient());
         browserSettings();
+        browser.addJavascriptInterface(new JavaScriptInterface(this), "Android");
         browser.loadUrl("https://qrman.vercel.app");
     }
 
@@ -37,7 +45,44 @@ public class MainActivity extends Activity {
         browser.getSettings().setJavaScriptEnabled(true);
         browser.getSettings().setDomStorageEnabled(true);
         browser.getSettings().setAllowFileAccess(true);
+        browser.setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) -> {
+            if (hasStoragePermission()
+                    || Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                    || Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+                saveFile(url);
+            } else {
+                downloadUrl = url;
+                requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, PERMISSION_REQUEST_CODE);
+            }
+        });
         browser.setOverScrollMode(WebView.OVER_SCROLL_NEVER);
+    }
+
+    private boolean hasStoragePermission() {
+        String permission = android.Manifest.permission.WRITE_EXTERNAL_STORAGE;
+        int res = checkCallingOrSelfPermission(permission);
+        return (res == PackageManager.PERMISSION_GRANTED);
+    }
+
+    private void saveFile(String url) {
+        if (url == null || url.isEmpty()) {
+            Toast.makeText(this, "Please try again", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        browser.loadUrl("javascript: Android.saveDataUrlAsFile('" + url + "');");
+        downloadUrl = null;
+    }
+
+    private WebViewClient getMyWebViewClient() {
+        return new WebViewClient() {
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                String script = "const download = document.querySelector('a');" +
+                        "const input = download.parentElement.parentElement.querySelector('input');" +
+                        "input.onchange = () => Android.setFileName(download.getAttribute('download') || 'unknown');";
+                view.evaluateJavascript(script, null);
+            }
+        };
     }
 
     private WebChromeClient getMyWebChromeClient() {
@@ -52,7 +97,7 @@ public class MainActivity extends Activity {
 
             @Override
             public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
-                uploadMessage = filePathCallback;
+                pickedFile = filePathCallback;
 
                 Intent pickIntent = new Intent();
                 pickIntent.setType("image/*");
@@ -65,16 +110,27 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        if (requestCode == PERMISSION_REQUEST_CODE) {
+            if (grantResults[0] == PackageManager.PERMISSION_GRANTED)
+                saveFile(downloadUrl);
+            else
+                Toast.makeText(this, "Need storage permission to download files", Toast.LENGTH_LONG).show();
+        } else
+            super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+    }
+
+    @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (resultCode == RESULT_CANCELED) {
-            uploadMessage.onReceiveValue(null);
-            uploadMessage = null;
+            pickedFile.onReceiveValue(null);
+            pickedFile = null;
         }
         if (resultCode == RESULT_OK) {
-            if (uploadMessage == null) return;
+            if (pickedFile == null) return;
             Uri result = data.getData();
-            uploadMessage.onReceiveValue(new Uri[]{result});
-            uploadMessage = null;
+            pickedFile.onReceiveValue(new Uri[]{result});
+            pickedFile = null;
         }
     }
 }
