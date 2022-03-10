@@ -1,4 +1,4 @@
-package id.my.bramaudi.smallapk;
+package id.my.bramaudi.qrman;
 
 import org.junit.Test;
 

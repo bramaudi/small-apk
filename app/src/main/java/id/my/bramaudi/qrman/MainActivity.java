@@ -1,4 +1,4 @@
-package id.my.bramaudi.smallapk;
+package id.my.bramaudi.qrman;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
@@ -24,7 +24,7 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        browser = (WebView) findViewById(R.id.webview);
+        browser = findViewById(R.id.webview);
         browser.setWebChromeClient(getMyWebChromeClient());
         browserSettings();
         browser.loadUrl("https://qrman.vercel.app");
