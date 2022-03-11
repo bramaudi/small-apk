@@ -2,13 +2,16 @@ package id.my.bramaudi.qrman;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.util.Log;
 import android.webkit.JsResult;
+import android.webkit.PermissionRequest;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
@@ -23,7 +26,6 @@ public class MainActivity extends Activity {
 
     private WebView browser;
     private ValueCallback<Uri[]> pickedFile;
-    private String downloadUrl = "";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -45,13 +47,13 @@ public class MainActivity extends Activity {
         browser.getSettings().setJavaScriptEnabled(true);
         browser.getSettings().setDomStorageEnabled(true);
         browser.getSettings().setAllowFileAccess(true);
+        browser.getSettings().setMediaPlaybackRequiresUserGesture(false);
         browser.setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) -> {
             if (hasStoragePermission()
                     || Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
                     || Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
                 saveFile(url);
             } else {
-                downloadUrl = url;
                 requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, PERMISSION_REQUEST_CODE);
             }
         });
@@ -70,7 +72,6 @@ public class MainActivity extends Activity {
             return;
         }
         browser.loadUrl("javascript: Android.saveDataUrlAsFile('" + url + "');");
-        downloadUrl = null;
     }
 
     private WebViewClient getMyWebViewClient() {
@@ -106,18 +107,32 @@ public class MainActivity extends Activity {
                 startActivityForResult(Intent.createChooser(pickIntent, "Select Picture"), PICKFILE_RESULT_CODE);
                 return true;
             }
+
+            @Override
+            @TargetApi(Build.VERSION_CODES.M)
+            public void onPermissionRequest(PermissionRequest request) {
+                if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                    request.grant(request.getResources());
+                } else {
+                    requestPermissions(new String[]{Manifest.permission.CAMERA}, PERMISSION_REQUEST_CODE);
+                }
+            }
         };
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         if (requestCode == PERMISSION_REQUEST_CODE) {
-            if (grantResults[0] == PackageManager.PERMISSION_GRANTED)
-                saveFile(downloadUrl);
-            else
-                Toast.makeText(this, "Need storage permission to download files", Toast.LENGTH_LONG).show();
-        } else
-            super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+            if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                browser.reload();
+                Toast.makeText(this, "Permission granted!", Toast.LENGTH_SHORT).show();
+                if (permissions[0].equals(Manifest.permission.CAMERA)) {
+                    Toast.makeText(this, "You can tap \"Camera\" button again.", Toast.LENGTH_LONG).show();
+                } else {
+                    Toast.makeText(this, "You can try download again.", Toast.LENGTH_LONG).show();
+                }
+            }
+        }
     }
 
     @Override
