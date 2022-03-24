@@ -4,12 +4,13 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
 import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.util.Log;
+import android.os.Message;
 import android.webkit.JsResult;
 import android.webkit.PermissionRequest;
 import android.webkit.ValueCallback;
@@ -48,6 +49,8 @@ public class MainActivity extends Activity {
         browser.getSettings().setDomStorageEnabled(true);
         browser.getSettings().setAllowFileAccess(true);
         browser.getSettings().setMediaPlaybackRequiresUserGesture(false);
+        browser.setOverScrollMode(WebView.OVER_SCROLL_NEVER);
+        browser.getSettings().setSupportMultipleWindows(true);
         browser.setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) -> {
             if (hasStoragePermission()
                     || Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
@@ -57,7 +60,6 @@ public class MainActivity extends Activity {
                 requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, PERMISSION_REQUEST_CODE);
             }
         });
-        browser.setOverScrollMode(WebView.OVER_SCROLL_NEVER);
     }
 
     private boolean hasStoragePermission() {
@@ -88,6 +90,16 @@ public class MainActivity extends Activity {
 
     private WebChromeClient getMyWebChromeClient() {
         return new WebChromeClient() {
+
+            @Override
+            public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg) {
+                WebView.HitTestResult result = view.getHitTestResult();
+                String data = result.getExtra();
+                Context context = view.getContext();
+                Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(data));
+                context.startActivity(browserIntent);
+                return false;
+            }
 
             @Override
             public boolean onJsAlert(WebView view, String url, String message, JsResult result) {
